@@ -11,6 +11,11 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
+// Define a custom WebSocket type with our additional properties
+interface ExtendedWebSocket extends WebSocket {
+  pingIntervalId?: number | NodeJS.Timeout;
+}
+
 type Message = {
   id: number;
   senderId: number;
@@ -52,7 +57,7 @@ export default function ChatPanel({ chatUser, onBack }: ChatPanelProps) {
     let reconnectAttempts = 0;
     const maxReconnectAttempts = 5;
     let reconnectTimeout: number | NodeJS.Timeout;
-    let ws: WebSocket;
+    let ws: ExtendedWebSocket;
 
     // Function to create and setup WebSocket
     const connectWebSocket = () => {
@@ -65,7 +70,7 @@ export default function ChatPanel({ chatUser, onBack }: ChatPanelProps) {
         const uniqueUrl = `${wsUrl}${wsUrl.includes('?') ? '&' : '?'}t=${Date.now()}`;
         console.log("Using unique URL:", uniqueUrl);
         
-        ws = new WebSocket(uniqueUrl);
+        ws = new WebSocket(uniqueUrl) as ExtendedWebSocket;
 
         ws.onopen = () => {
           console.log("WebSocket connected successfully");
@@ -109,7 +114,7 @@ export default function ChatPanel({ chatUser, onBack }: ChatPanelProps) {
               }, 30000);
               
               // Store the interval ID so we can clear it on unmount
-              ws.pingIntervalId = pingInterval;
+              (ws as any).pingIntervalId = pingInterval;
             } else if (data.type === "message" && data.from === chatUser.id) {
               // Add the new message to pending messages
               setPendingMessages(prev => [...prev, {
@@ -170,8 +175,8 @@ export default function ChatPanel({ chatUser, onBack }: ChatPanelProps) {
     return () => {
       if (ws) {
         // Clear any ping intervals
-        if (ws.pingIntervalId) {
-          clearInterval(ws.pingIntervalId);
+        if ((ws as any).pingIntervalId) {
+          clearInterval((ws as any).pingIntervalId);
           console.log("Cleared ping interval on unmount");
         }
         
