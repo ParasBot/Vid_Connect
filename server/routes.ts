@@ -73,6 +73,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
           userId = data.userId;
           clients.set(userId, ws);
           console.log(`User ${userId} connected to WebSocket`);
+          
+          // Send an authentication confirmation
+          ws.send(JSON.stringify({ 
+            type: "auth_success",
+            message: "Authentication successful"
+          }));
+        } else if (data.type === "ping") {
+          // Respond to ping messages to confirm connection is alive
+          ws.send(JSON.stringify({ 
+            type: "pong",
+            timestamp: new Date().toISOString()
+          }));
+          console.log(`Ping received from ${userId || 'unknown user'}, pong sent`);
         } else if (data.type === "message" && userId && data.to && data.content) {
           // Create the message in storage
           const newMessage = await storage.createMessage({

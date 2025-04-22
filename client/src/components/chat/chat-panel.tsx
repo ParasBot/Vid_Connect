@@ -61,21 +61,56 @@ export default function ChatPanel({ chatUser, onBack }: ChatPanelProps) {
         const wsUrl = getWebSocketUrl();
         console.log("Connecting to WebSocket at:", wsUrl);
         
-        ws = new WebSocket(wsUrl);
+        // Add timestamp to avoid caching of the WebSocket connection in reverse proxies
+        const uniqueUrl = `${wsUrl}${wsUrl.includes('?') ? '&' : '?'}t=${Date.now()}`;
+        console.log("Using unique URL:", uniqueUrl);
+        
+        ws = new WebSocket(uniqueUrl);
 
         ws.onopen = () => {
-          console.log("WebSocket connected");
+          console.log("WebSocket connected successfully");
           // Reset reconnect attempts on successful connection
           reconnectAttempts = 0;
           // Authenticate with the WebSocket
           ws.send(JSON.stringify({ type: "auth", userId: user.id }));
+          
+          // Send a ping immediately to test the connection
+          try {
+            ws.send(JSON.stringify({ type: "ping" }));
+            console.log("Initial ping sent");
+          } catch (err) {
+            console.error("Failed to send initial ping:", err);
+          }
         };
 
         ws.onmessage = (event) => {
           try {
             const data = JSON.parse(event.data);
             
-            if (data.type === "message" && data.from === chatUser.id) {
+            if (data.type === "auth_success") {
+              console.log("Authentication successful:", data.message);
+            } else if (data.type === "pong") {
+              console.log("Received pong from server:", data.timestamp);
+              
+              // Setup regular pinging to keep connection alive (every 30 seconds)
+              const pingInterval = setInterval(() => {
+                if (ws.readyState === WebSocket.OPEN) {
+                  try {
+                    ws.send(JSON.stringify({ type: "ping" }));
+                    console.log("Ping sent");
+                  } catch (err) {
+                    console.error("Failed to send ping:", err);
+                    clearInterval(pingInterval);
+                  }
+                } else {
+                  console.warn("WebSocket not open, clearing ping interval");
+                  clearInterval(pingInterval);
+                }
+              }, 30000);
+              
+              // Store the interval ID so we can clear it on unmount
+              ws.pingIntervalId = pingInterval;
+            } else if (data.type === "message" && data.from === chatUser.id) {
               // Add the new message to pending messages
               setPendingMessages(prev => [...prev, {
                 id: data.id,
@@ -134,6 +169,12 @@ export default function ChatPanel({ chatUser, onBack }: ChatPanelProps) {
     // Clean up on unmount
     return () => {
       if (ws) {
+        // Clear any ping intervals
+        if (ws.pingIntervalId) {
+          clearInterval(ws.pingIntervalId);
+          console.log("Cleared ping interval on unmount");
+        }
+        
         // Use code 1000 (Normal Closure) to indicate intentional close
         ws.close(1000, "Component unmounting");
       }
