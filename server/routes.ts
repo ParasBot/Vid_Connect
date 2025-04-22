@@ -45,6 +45,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/health", (req, res) => {
     res.status(200).json({ status: "ok", timestamp: new Date().toISOString() });
   });
+  
+  // Add WebSocket-specific health check
+  app.get("/api/ws-health", (req, res) => {
+    res.json({ 
+      status: "ok",
+      timestamp: new Date().toISOString(),
+      activeConnections: clients.size,
+      serverUptime: process.uptime()
+    });
+  });
 
   // Serve uploaded files
   app.use("/uploads", express.static(uploadDir));

@@ -3,7 +3,7 @@ import ChatMessage from "@/components/ui/chat-message";
 import MessageInput from "./message-input";
 import UserAvatar from "@/components/ui/user-avatar";
 import { Button } from "@/components/ui/button";
-import { getWebSocketUrl } from "@/lib/utils";
+import { getWebSocketUrl, checkWebSocketHealth, WebSocketHealth } from "@/lib/utils";
 import { ArrowLeft, Video } from "lucide-react";
 import { Link } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
@@ -42,6 +42,8 @@ export default function ChatPanel({ chatUser, onBack }: ChatPanelProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [websocket, setWebsocket] = useState<WebSocket | null>(null);
   const [pendingMessages, setPendingMessages] = useState<Message[]>([]);
+  const [wsHealth, setWsHealth] = useState<WebSocketHealth | null>(null);
+  const [connectionStatus, setConnectionStatus] = useState<'connected' | 'disconnected' | 'connecting'>('disconnected');
 
   // Fetch messages
   const { data: messages = [], isLoading } = useQuery<Message[]>({
@@ -70,12 +72,14 @@ export default function ChatPanel({ chatUser, onBack }: ChatPanelProps) {
         const uniqueUrl = `${wsUrl}${wsUrl.includes('?') ? '&' : '?'}t=${Date.now()}`;
         console.log("Using unique URL:", uniqueUrl);
         
+        setConnectionStatus('connecting');
         ws = new WebSocket(uniqueUrl) as ExtendedWebSocket;
 
         ws.onopen = () => {
           console.log("WebSocket connected successfully");
           // Reset reconnect attempts on successful connection
           reconnectAttempts = 0;
+          
           // Authenticate with the WebSocket
           ws.send(JSON.stringify({ type: "auth", userId: user.id }));
           
@@ -86,6 +90,14 @@ export default function ChatPanel({ chatUser, onBack }: ChatPanelProps) {
           } catch (err) {
             console.error("Failed to send initial ping:", err);
           }
+          
+          // Check WebSocket server health
+          checkWebSocketHealth().then(health => {
+            if (health) {
+              setWsHealth(health);
+              console.log("WebSocket server health:", health);
+            }
+          });
         };
 
         ws.onmessage = (event) => {
@@ -94,6 +106,7 @@ export default function ChatPanel({ chatUser, onBack }: ChatPanelProps) {
             
             if (data.type === "auth_success") {
               console.log("Authentication successful:", data.message);
+              setConnectionStatus('connected');
             } else if (data.type === "pong") {
               console.log("Received pong from server:", data.timestamp);
               
@@ -137,10 +150,12 @@ export default function ChatPanel({ chatUser, onBack }: ChatPanelProps) {
 
         ws.onerror = (error) => {
           console.error("WebSocket error:", error);
+          setConnectionStatus('disconnected');
         };
 
         ws.onclose = (event) => {
           console.log(`WebSocket connection closed: ${event.code} ${event.reason}`);
+          setConnectionStatus('disconnected');
           
           // Try to reconnect unless this was a normal closure or component unmounting
           if (event.code !== 1000 && reconnectAttempts < maxReconnectAttempts) {

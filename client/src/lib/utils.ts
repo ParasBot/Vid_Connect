@@ -99,3 +99,26 @@ export function getWebSocketUrl(): string {
   // Include the specific WebSocket path that matches server configuration
   return `${protocol}//${host}/ws`;
 }
+
+export interface WebSocketHealth {
+  status: string;
+  timestamp: string;
+  activeConnections: number;
+  serverUptime: number;
+}
+
+export async function checkWebSocketHealth(): Promise<WebSocketHealth | null> {
+  try {
+    const response = await fetch('/api/ws-health');
+    
+    if (!response.ok) {
+      console.error('WebSocket health check failed:', response.statusText);
+      return null;
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.error('Error checking WebSocket health:', error);
+    return null;
+  }
+}
