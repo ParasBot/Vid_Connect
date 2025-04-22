@@ -3,13 +3,15 @@ import ChatMessage from "@/components/ui/chat-message";
 import MessageInput from "./message-input";
 import UserAvatar from "@/components/ui/user-avatar";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { getWebSocketUrl, checkWebSocketHealth, WebSocketHealth } from "@/lib/utils";
-import { ArrowLeft, Video } from "lucide-react";
+import { ArrowLeft, Info, Video } from "lucide-react";
 import { Link } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { formatDate, formatTime } from "@/lib/utils";
 
 // Define a custom WebSocket type with our additional properties
 interface ExtendedWebSocket extends WebSocket {
@@ -208,11 +210,82 @@ export default function ChatPanel({ chatUser, onBack }: ChatPanelProps) {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, pendingMessages]);
+  
+  // Periodically check WebSocket health
+  useEffect(() => {
+    if (!user) return;
+    
+    // Check WebSocket health every 30 seconds
+    const healthCheckInterval = setInterval(async () => {
+      try {
+        const health = await checkWebSocketHealth();
+        if (health) {
+          setWsHealth(health);
+          console.log("WebSocket server health:", health);
+        }
+      } catch (error) {
+        console.error("Error checking WebSocket health:", error);
+      }
+    }, 30000);
+    
+    // Initial health check
+    checkWebSocketHealth().then(health => {
+      if (health) {
+        setWsHealth(health);
+        console.log("Initial WebSocket server health:", health);
+      }
+    });
+    
+    return () => {
+      clearInterval(healthCheckInterval);
+    };
+  }, [user]);
 
   // Combine fetched and pending messages
   const allMessages = [...messages, ...pendingMessages].sort((a, b) => {
     return new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime();
   });
+
+  // Function to manually reconnect WebSocket
+  const handleReconnect = () => {
+    if (websocket) {
+      // Close existing connection if any
+      if (websocket.readyState === WebSocket.OPEN || 
+          websocket.readyState === WebSocket.CONNECTING) {
+        websocket.close();
+      }
+      
+      // Create a new connection
+      const wsUrl = getWebSocketUrl();
+      const uniqueUrl = `${wsUrl}${wsUrl.includes('?') ? '&' : '?'}t=${Date.now()}`;
+      
+      setConnectionStatus('connecting');
+      const newWs = new WebSocket(uniqueUrl);
+      
+      // Set up event handlers
+      newWs.onopen = () => {
+        if (user) {
+          newWs.send(JSON.stringify({ type: "auth", userId: user.id }));
+          setConnectionStatus('connected');
+          toast({
+            title: "Reconnected",
+            description: "WebSocket connection restored",
+          });
+        }
+      };
+      
+      newWs.onerror = () => {
+        setConnectionStatus('disconnected');
+        toast({
+          title: "Connection Failed",
+          description: "Could not establish WebSocket connection",
+          variant: "destructive"
+        });
+      };
+      
+      setWebsocket(newWs);
+    }
+  };
 
   const handleSendMessage = async (content: string) => {
     if (!user || !content.trim()) return;
@@ -273,6 +346,73 @@ export default function ChatPanel({ chatUser, onBack }: ChatPanelProps) {
         <div className="ml-3 flex-1">
           <h3 className="text-sm font-medium text-gray-900">{chatUser.displayName}</h3>
           <p className="text-xs text-gray-500">@{chatUser.username}</p>
+        </div>
+        
+        {/* Connection status indicator */}
+        <div className="mr-2 flex items-center">
+          <div className={`h-2 w-2 rounded-full mr-1 ${
+            connectionStatus === 'connected' ? 'bg-green-500' : 
+            connectionStatus === 'connecting' ? 'bg-yellow-500' : 'bg-red-500'
+          }`} />
+          <span className="text-xs text-gray-500">
+            {connectionStatus === 'connected' ? 'Online' : 
+             connectionStatus === 'connecting' ? 'Connecting' : 'Offline'}
+          </span>
+          
+          {/* Health info tooltip */}
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-5 w-5 ml-1">
+                  <Info className="h-3 w-3" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent className="w-80">
+                <div className="text-xs">
+                  <p className="font-semibold mb-1">WebSocket Health</p>
+                  {wsHealth ? (
+                    <div className="grid grid-cols-2 gap-1">
+                      <span>Status:</span>
+                      <span className={`${wsHealth.status === 'ok' ? 'text-green-500' : 'text-red-500'}`}>
+                        {wsHealth.status.toUpperCase()}
+                      </span>
+                      
+                      <span>Last Updated:</span>
+                      <span>{formatTime(wsHealth.timestamp)}</span>
+                      
+                      <span>Active Connections:</span>
+                      <span>{wsHealth.activeConnections}</span>
+                      
+                      <span>Server Uptime:</span>
+                      <span>{Math.round(wsHealth.serverUptime / 60)} minutes</span>
+                      
+                      <span>Client Status:</span>
+                      <span className={`${
+                        connectionStatus === 'connected' ? 'text-green-500' : 
+                        connectionStatus === 'connecting' ? 'text-yellow-500' : 'text-red-500'
+                      }`}>
+                        {connectionStatus.toUpperCase()}
+                      </span>
+                    </div>
+                  ) : (
+                    <p>No health data available</p>
+                  )}
+                </div>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+          
+          {connectionStatus !== 'connected' && (
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              className="ml-1 text-xs py-1 h-6"
+              onClick={handleReconnect}
+              disabled={connectionStatus === 'connecting'}
+            >
+              Reconnect
+            </Button>
+          )}
         </div>
         
         <Link href={`/profile/${chatUser.id}`}>
