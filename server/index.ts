@@ -56,11 +56,6 @@ app.use((req, res, next) => {
 });
 
 (async () => {
-  // Add a root path handler for basic health check
-  app.get("/", (req, res) => {
-    res.status(200).send("<h1>VidConnect API Server</h1><p>Server is running. Try visiting <a href='/api/health'>/api/health</a> for status check.</p>");
-  });
-  
   // Register API routes first
   const server = await registerRoutes(app);
 
