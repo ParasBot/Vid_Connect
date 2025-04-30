@@ -1,0 +1,54 @@
+Running the VidConnect Project Locally
+If you download the zip file of this project, here are the steps to run it locally on your machine:
+
+Prerequisites
+Make sure you have Node.js installed (version 18+ recommended)
+You'll need npm (comes with Node.js) or yarn package manager
+Step-by-Step Instructions
+1. Extract the ZIP file
+Extract the downloaded ZIP file to a folder on your computer.
+
+2. Install dependencies
+Open a terminal/command prompt, navigate to the project folder, and run:
+
+npm install
+This will install all the required dependencies for both the frontend and backend.
+
+3. Start the application
+From the project root directory, run:
+
+npm run dev
+This command will:
+
+Start both the Express server (backend) and the Vite development server (frontend)
+Set up the in-memory database with sample data
+Enable WebSocket connections for real-time messaging
+4. Access the application
+Open your browser and navigate to:
+
+http://localhost:5000
+Common Issues and Solutions
+If the application doesn't start
+Make sure port 5000 is not already in use by another application
+Check if you have all required dependencies installed with npm install
+If the WebSocket doesn't connect
+The application includes the WebSocket health monitoring and manual reconnect features we just added, so:
+
+Check the connection status indicator in the chat interface
+Use the "Reconnect" button if you see it's disconnected (red indicator)
+Hover over the status indicator to see detailed WebSocket health information
+Database Persistence
+Note that this project uses an in-memory database by default, which means:
+
+All data will be lost when you stop the application
+Each time you restart, it will initialize with fresh sample data
+Project Structure Overview
+/client - Frontend React application
+/server - Backend Express API
+/shared - Shared types and schemas
+/uploads - Where uploaded files like videos and images are stored
+If you need to make any modifications to the project for local development, the key files to look at are:
+
+server/index.ts - Main server configuration
+client/src/lib/queryClient.ts - API configuration for the frontend
+package.json - Project dependencies and scripts
